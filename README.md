@@ -9,4 +9,4 @@ The code was written in about 3 hours and 55 minutes :)
 3. And enjoy :)
 
 ## TODO
-(IDK ¯\_(ツ)_/¯)
+(IDK ¯\\\_(ツ)\_/¯)
