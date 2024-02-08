@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>minesweeper</title>
+
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            background: #131313;
+        }
+
+        .row {
+            display: flex;
+            flex-direction: row;
+        }
+
+        .cell {
+            user-select: none;
+            width: 32px;
+            height: 32px;
+            font-size: medium;
+            font-weight: bold;
+            font-family: Arial, Helvetica, sans-serif;
+            line-height: 32px;
+            text-align: center;
+            background-color: black;
+            border: 1px solid rgb(45, 45, 45);
+        }
+
+        .cell:hover {
+            border: 1px solid red;
+        }
+
+        .cleared {
+            color: black;
+            background-color: white;
+        }
+
+        .bomb {
+            background-color: red;
+        }
+
+        .flagged {
+            background-color: blueviolet !important;
+        }
+
+        #root {
+            display: flex;
+            flex-direction: column;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="root"></div>
+    <script>
+
+        var BOMBS = 10;
+        var WIDTH = 10;
+        var HEIGHT = 10;
+
+
+        class Cell {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                this.isFlagged = false;
+                this.isBomb = false;
+                this.isCleared = false;
+                this.bombCount = 0;
+            }
+
+        }
+
+        class MineField {
+            constructor(w = 10, h = 10) {
+                this.width = w;
+                this.height = h;
+                
+                /**
+                 * @type {Cell[][]}
+                 */
+                this.field = [[]];
+
+                this.locker = 0;
+            }
+
+            buildFieldMap() {
+                return Array.from({ length: this.height },
+                    (_, y) => Array.from({ length: this.width },
+                    (_, x) => new Cell(x, y)));
+            }
+
+            setBombs(count = 10) {
+                for (let i = 0; i < count; i++) {
+                    const cell = this.field[Math.floor(Math.random()*this.height)][Math.floor(Math.random()*this.width)];
+                    if (cell.isBomb) i--;
+                    else cell.isBomb = true;
+                }
+            }
+
+            findAround(x, y) {
+                return [
+                    this.field[y-1]?.[x-1], this.field[y-1]?.[x], this.field[y-1]?.[x+1],
+                    this.field[y]?.[x-1],                         this.field[y]?.[x+1],
+                    this.field[y+1]?.[x-1], this.field[y+1]?.[x], this.field[y+1]?.[x+1]
+                ].filter(v=>v);
+            }
+
+            findHV(x, y) {
+                return [
+                    this.field[y-1]?.[x],
+                    this.field[y]?.[x-1], this.field[y]?.[x+1],
+                    this.field[y+1]?.[x],
+                ].filter(v=>v);
+            }
+
+            /**
+             * @param {Cell} startCell
+             * @param {Cell[]} aroundCells
+             */
+            fill(startCell, aroundCells) {
+                if (startCell.isBomb) return false;
+                if (startCell.bombCount > 0) {
+                    startCell.isFlagged = false;
+                    startCell.isCleared = true;
+                    return;
+                };
+                for (const cell of aroundCells) {
+                    if (!cell.isCleared) {
+                        cell.isFlagged = false;
+                        cell.isCleared = true;
+
+                        if (cell.bombCount < 1) {
+                            this.fill(cell, this.findAround(cell.x, cell.y));
+                        }
+                    }
+                }
+            }
+
+            calcBombs() {
+                this.field.forEach(
+                    (row, y) => row.forEach(
+                    (cell, x) => cell.bombCount = this.findAround(cell.x, cell.y)
+                        .reduce((p, c) => p + !!c?.isBomb, 0)));
+            }
+        }
+        
+
+
+        const FIELD = new MineField(WIDTH, HEIGHT);
+
+        const root = document.getElementById('root');
+        
+        var stopGame = false;
+
+        const clear = el => el && [...el.childNodes].forEach(cEl => cEl.remove());
+
+        const genVisualMap = () => {
+            for (let y = 0; y < FIELD.height; y++) {
+                const row = document.createElement('div');
+                row.className = 'row';
+                for (let x = 0; x < FIELD.width; x++) {
+                    const cell = document.createElement('div');
+                    const virtCell = FIELD.field[y]?.[x];
+                    
+                    if (!virtCell) continue;
+
+                    cell.className = 'cell';
+                    cell.onmousedown = (e) => {
+                        if (stopGame) return;
+
+                        if (e.buttons === 2) {
+                            if (!virtCell.isCleared)
+                                virtCell.isFlagged = !virtCell.isFlagged;
+                        } else {
+                            if (virtCell.isBomb) {
+                                stopGame = true; 
+                                document.body.style.backgroundColor = 'rgb(80, 0, 0)';
+                            }
+                            else {
+                                virtCell.isFlagged = false;
+                                FIELD.fill(virtCell, FIELD.findAround(virtCell.x, virtCell.y)); 
+                            }
+                        }
+
+                        updateVisualMap();
+
+                        let flagged = 0;
+                        let cleared = 0;
+                        FIELD.field.forEach((row) => row.forEach(cell => {
+                            flagged+=cell.isFlagged;
+                            cleared+=cell.isCleared;
+                        }));
+
+                        if (flagged === BOMBS && cleared === (WIDTH*HEIGHT-BOMBS)) {
+                            stopGame = true;
+                            document.body.style.backgroundColor = 'rgb(0, 80, 0)';
+                        }
+                    }
+                    cell.oncontextmenu = (e) => {
+                        e.preventDefault();
+                    }
+                    row.append(cell);
+                }
+                root.append(row);
+            }
+        }
+
+
+        const updateVisualMap = () => {
+            const rows = root.childNodes;
+            if (!rows) throw new Error('#root element is not defined');
+            for (let y = 0; y < FIELD.field.length; y++) {
+                const row = rows[y];
+                const rowField = FIELD.field[y];
+                if (!row || !rowField) continue;
+                for (let x = 0; x < rowField.length; x++) {
+                    const cell = row.childNodes[x];
+                    const virtCell = rowField[x];
+                    if (!virtCell) continue;
+
+                    if (virtCell.isCleared) {
+                        cell.textContent = virtCell.bombCount;
+                        cell.classList.add('cleared');
+                    }
+                    else if (virtCell.isFlagged) cell.classList.add('flagged');
+
+                    if (!virtCell.isFlagged) cell.classList.remove('flagged');
+
+                    if (virtCell.isBomb && stopGame) cell.classList.add('bomb');
+                }
+            }
+        }
+
+        clear(root);
+
+        FIELD.field = FIELD.buildFieldMap();
+        FIELD.setBombs(BOMBS);
+        FIELD.calcBombs();
+
+        genVisualMap();
+        updateVisualMap();
+    </script>
+</body>
+
+</html>
